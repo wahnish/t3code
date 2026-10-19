@@ -5,6 +5,7 @@ import { ScopedSwitch } from "./ScopedSwitch";
 import { DeviceHostsSettings } from "./DeviceHostsSettings";
 import {
   AuthSettingsWriteScope,
+  AuthPreviewOperateScope,
   BrowserImportFailureReason,
   BROWSER_PROFILE_MAX_COUNT,
   type BrowserLinkTarget,
@@ -42,7 +43,11 @@ import { previewBridge } from "~/components/preview/previewBridge";
 import { cn, randomUUID } from "~/lib/utils";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { deviceEnvironment, useDeviceState } from "~/state/device";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import {
+  readEnvironmentScope,
+  useEnvironmentScope,
+  useEnvironmentsWithScope,
+} from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { previewEnvironment } from "~/state/preview";
 import { useServerConfigs } from "~/state/entities";
@@ -1144,7 +1149,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
   );
 
   const loadSources = () => {
-    if (!previewBridge) return;
+    if (!previewBridge) {
+      setSources([]);
+      return;
+    }
     void previewBridge
       .listBrowserImportSources()
       .then(setSources)
@@ -1473,9 +1481,16 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 
 export function IntegrationsSettingsPanel() {
   const previewDefaultsDisabled = !isElectron;
+  const { environments } = useEnvironments();
+  const serverConfigs = useServerConfigs();
+  const operable = useEnvironmentsWithScope(environments, AuthPreviewOperateScope);
+  const profilesAvailable =
+    isElectron ||
+    [...serverConfigs].some(
+      ([id, config]) => config.environment.capabilities.serverBrowser && operable.has(id),
+    );
   const previewDefaults = (
     <>
-      <BrowserProfilesSetting disabled={previewDefaultsDisabled} />
       <BrowserViewportSetting disabled={previewDefaultsDisabled} />
       <BrowserZoomSetting disabled={previewDefaultsDisabled} />
       <BrowserAppearanceSetting disabled={previewDefaultsDisabled} />
@@ -1490,6 +1505,7 @@ export function IntegrationsSettingsPanel() {
     <SettingsPageContainer>
       <ProjectDefaultsSettings category="integrations" />
       <SettingsSection id="browser" title="Browser">
+        <BrowserProfilesSetting disabled={!profilesAvailable} />
         {previewDefaultsDisabled ? (
           <SettingsUnavailableGroup message="Only available in the desktop app.">
             {previewDefaults}
